@@ -1,0 +1,14 @@
+base_enabled: true
+mid_enabled: true
+advanced_enabled: true
+pattern_weight: 0.55
+classifier_weight: 0.45
+flag_threshold: 0.35
+sanitize_threshold: 0.57
+block_threshold: 0.76
+similarity_threshold: 0.86
+document_threshold: 0.64
+decay_half_life: 180
+block_capacity: 5
+block_refill_seconds: 60
+allowed_domains: []

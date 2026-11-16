@@ -1,0 +1,13 @@
+- {phrase: override, category: direct_injection, weight: 0.83}
+- {phrase: change of persona, category: jailbreak_roleplay, weight: 0.84}
+- {phrase: role reassignment, category: jailbreak_roleplay, weight: 0.86}
+- {phrase: character transition, category: jailbreak_roleplay, weight: 0.83}
+- {phrase: private setup, category: system_prompt_extraction, weight: 0.93}
+- {phrase: hidden configuration, category: system_prompt_extraction, weight: 0.95}
+- {phrase: internal setup, category: system_prompt_extraction, weight: 0.82}
+- {phrase: setup metadata, category: system_prompt_extraction, weight: 0.85}
+- {phrase: system prompt, category: system_prompt_extraction, weight: 0.72}
+- {phrase: ignore previous instructions, category: direct_injection, weight: 1.0}
+- {phrase: inert image preview, category: exfiltration, weight: 0.77}
+- {phrase: synthetic sample, category: exfiltration, weight: 0.76}
+- {phrase: demo_fixture_document_signal, category: indirect_injection, weight: 1.0}
