@@ -24,6 +24,7 @@ class Settings(BaseModel):
     block_capacity: int = Field(5, gt=0)
     block_refill_seconds: float = Field(60, gt=0)
     allowed_domains: tuple[str, ...] = ()
+    allowed_tool_domains: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def check_thresholds(self) -> Self:

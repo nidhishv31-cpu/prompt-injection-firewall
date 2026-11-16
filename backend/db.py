@@ -17,6 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from backend.config import ROOT
 from backend.models import ChatResponse
+from backend.pipeline.policy import Decision, Reason
 
 
 class Base(DeclarativeBase):
@@ -55,17 +56,34 @@ class Store:
         Base.metadata.create_all(self.engine)
 
     def add(self, original: str, result: ChatResponse) -> None:
+        self.record(
+            original=original,
+            normalized=result.normalized,
+            decision=result.decision,
+            risk=result.risk,
+            reasons=result.reasons,
+            latency_ms=result.latency_ms,
+        )
+
+    def record(
+        self,
+        *,
+        original: str,
+        normalized: str,
+        decision: Decision,
+        risk: float,
+        reasons: list[Reason],
+        latency_ms: float,
+    ) -> None:
         with Session(self.engine) as session:
             session.add(
                 RequestLog(
                     original=original,
-                    normalized=result.normalized,
-                    decision=result.decision,
-                    risk=result.risk,
-                    reasons=[
-                        reason.model_dump(mode="json") for reason in result.reasons
-                    ],
-                    latency_ms=result.latency_ms,
+                    normalized=normalized,
+                    decision=decision,
+                    risk=risk,
+                    reasons=[reason.model_dump(mode="json") for reason in reasons],
+                    latency_ms=latency_ms,
                 )
             )
             session.commit()

@@ -1,6 +1,8 @@
 from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from os import getenv
+from pathlib import Path
 from threading import RLock
 from time import monotonic, perf_counter
 from uuid import UUID, uuid4
@@ -9,14 +11,25 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from backend.config import Settings, load_settings
+from backend.config import ROOT, Settings, load_settings
 from backend.console import apply_rules, router
 from backend.db import Store
-from backend.models import ChatRequest, ChatResponse, RulesUpdate
+from backend.gateway.responses import configured_upstream
+from backend.gateway.responses import router as responses_router
+from backend.models import (
+    ActionRequest,
+    ChatRequest,
+    ChatResponse,
+    PromptRequest,
+    PromptResponse,
+    RulesUpdate,
+)
+from backend.pipeline.action_policy import ActionResult, evaluate_action
 from backend.pipeline.conversation_state import SessionRisk, TokenBucket, replenish
 from backend.pipeline.firewall import Firewall, Verdict
 from backend.pipeline.normalizer import clean
 from backend.pipeline.policy import Decision, Patterns, Reason, load_rules
+from backend.pipeline.retrieval import load_notes
 from backend.pipeline.similarity import SimilarityIndex
 from backend.training.train_classifier import cases, load_or_train, split_cases
 from backend.victim_app.chat import Turn, create_backend
@@ -27,6 +40,17 @@ from backend.victim_app.ollama import ProviderError
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     load_dotenv()
+    app.state.responses_upstream = configured_upstream()
+    app.state.notes = load_notes()
+    notes_directory = getenv("PI_FIREWALL_NOTES_DIR", "").strip()
+    app.state.protected_roots = (
+        (Path(notes_directory).resolve(strict=True),) if notes_directory else ()
+    )
+    app.state.action_root = Path(
+        getenv("PI_FIREWALL_ACTION_ROOT") or ROOT.parent
+    ).resolve(strict=True)
+    if not app.state.action_root.is_dir():
+        raise ValueError("The action policy root must be a directory.")
     classifier, metrics = load_or_train()
     app.state.metrics = metrics
     app.state.settings = load_settings()
@@ -54,11 +78,71 @@ app.add_middleware(
     TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "backend"]
 )
 app.include_router(router)
+app.include_router(responses_router)
 
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/api/inspect-prompt", response_model=PromptResponse)
+def inspect_prompt(body: PromptRequest, request: Request) -> PromptResponse:
+    started = perf_counter()
+    with request.app.state.lock:
+        firewall: Firewall = request.app.state.firewall
+        settings: Settings = request.app.state.settings
+    verdict = firewall.inspect(body.text, settings)
+    store: Store = request.app.state.store
+    store.record(
+        original=f"[{body.source} chat prompt]",
+        normalized="",
+        decision=verdict.decision,
+        risk=verdict.risk,
+        reasons=[
+            item.model_copy(update={"evidence": "Prompt hook finding."})
+            for item in verdict.reasons
+        ],
+        latency_ms=(perf_counter() - started) * 1000,
+    )
+    return PromptResponse(decision=verdict.decision, risk=verdict.risk)
+
+
+@app.post("/api/inspect-action", response_model=ActionResult)
+def inspect_action(body: ActionRequest, request: Request) -> ActionResult:
+    started = perf_counter()
+    with request.app.state.lock:
+        settings: Settings = request.app.state.settings
+    result = evaluate_action(
+        request.app.state.action_root,
+        body.cwd,
+        body.tool,
+        body.arguments,
+        settings.allowed_tool_domains,
+        request.app.state.protected_roots,
+    )
+    decision = {
+        "allow": Decision.ALLOW,
+        "deny": Decision.BLOCK,
+        "review": Decision.FLAG,
+    }[result.decision]
+    risk = {"allow": 0.0, "deny": 1.0, "review": 0.5}[result.decision]
+    request.app.state.store.record(
+        original=f"[{body.source} tool request]",
+        normalized="",
+        decision=decision,
+        risk=risk,
+        reasons=[
+            Reason(
+                layer="tool_policy",
+                score=risk,
+                evidence=result.reason,
+                category="tool_policy",
+            )
+        ],
+        latency_ms=(perf_counter() - started) * 1000,
+    )
+    return result
 
 
 @app.post(

@@ -16,6 +16,7 @@ jobs:
       - run: python -m pip install -r backend/requirements.txt pytest black ruff
       - run: make lint test
       - run: make seed eval
+      - run: python -m backend.eval.heldout --compare backend/eval/heldout_baseline.json
 
   frontend:
     runs-on: ubuntu-latest

@@ -1,6 +1,7 @@
 from collections import Counter
 from datetime import UTC
 from statistics import median, quantiles
+from time import perf_counter
 from typing import Annotated
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
@@ -13,7 +14,7 @@ from backend.eval.suite import run_case
 from backend.models import RulesUpdate
 from backend.pipeline.doc_scanner import scan
 from backend.pipeline.firewall import Firewall
-from backend.pipeline.policy import Patterns
+from backend.pipeline.policy import Decision, Patterns
 from backend.victim_app.documents import DOCUMENTS, Document
 
 router = APIRouter(prefix="/api")
@@ -25,6 +26,50 @@ class DocumentRequest(BaseModel):
 
 class LabRequest(BaseModel):
     case_id: Annotated[str, Field(max_length=80)] | None = None
+
+
+class NoteRequest(BaseModel):
+    note: str = Field(
+        min_length=1, max_length=60, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$"
+    )
+
+
+@router.get("/guarded-notes")
+def guarded_notes(request: Request) -> list[dict[str, str]]:
+    notes: dict[str, Document] = request.app.state.notes
+    return [{"id": note.slug, "title": note.title} for note in notes.values()]
+
+
+@router.post("/guarded-notes/read")
+def read_guarded_note(body: NoteRequest, request: Request) -> dict[str, str]:
+    started = perf_counter()
+    note = request.app.state.notes.get(body.note)
+    if note is None:
+        raise HTTPException(404, "Guarded note not found.")
+    with request.app.state.lock:
+        settings: Settings = request.app.state.settings
+        firewall: Firewall = request.app.state.firewall
+    if not settings.mid_enabled:
+        raise HTTPException(503, "The document inspection tier is disabled.")
+    result = scan(note, firewall.patterns, settings)
+    decision = Decision.SANITIZE if result.reasons else Decision.ALLOW
+    request.app.state.store.record(
+        original="[Guarded note retrieval]",
+        normalized="",
+        decision=decision,
+        risk=max((reason.score for reason in result.reasons), default=0),
+        reasons=[
+            reason.model_copy(update={"evidence": "Guarded retrieval finding."})
+            for reason in result.reasons
+        ],
+        latency_ms=(perf_counter() - started) * 1000,
+    )
+    text = (
+        result.document.body
+        if result.document
+        else "[Tool result withheld by the prompt firewall.]"
+    )
+    return {"decision": decision, "text": text}
 
 
 def apply_rules(app: FastAPI, update: RulesUpdate, persist: bool = True) -> None:

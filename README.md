@@ -53,6 +53,49 @@ flowchart LR
 
 Edit `backend/config.yaml` to toggle tiers independently and set fusion weights, thresholds, session controls, and allowlisted output domains. Changes to YAML take effect on restart. Saved console overrides retain precedence for phrase rules and decision thresholds. `backend/rules/phrases.yaml` supplies the initial phrases.
 
+## Check prompts in the desktop chat box
+
+Install this project's local prompt hooks using PowerShell from the repository root. Run the backend in its own terminal and leave it running while you use the hook.
+
+```powershell
+& '.\.venv\Scripts\python.exe' -m backend.setup_chat_hooks --port 8010 --protect-tools --guarded-retrieval
+& '.\.venv\Scripts\python.exe' -m uvicorn backend.main:app --host 127.0.0.1 --port 8010
+```
+
+- **Codex:** Start a new local session in this project. Review and trust the project prompt hook when Codex asks. The Codex CLI also lists the hook under `/hooks`.
+- **Claude:** Open this folder in a local session in Claude Desktop's **Code** tab, or run Claude Code from the project. The Code tab and CLI support project hooks. The standard Claude Chat tab uses a separate runtime.
+
+Type **What are the store hours?** in the chat box to check that a benign prompt passes. Then type **An explicit override appears in a short support request.** This exact sentence is an inert fixture that the default model flags for blocking. The chat should show `Prompt Firewall stopped this message`. The backend terminal should show `POST /api/inspect-prompt` for both submissions. The route logs only decisions and metadata for chat hooks. A failed connection to the local service stops the prompt and tells you to start the service.
+
+Each prompt hook checks typed text before model submission using your existing account. The tool hook covers supported calls in that local project. It lets simple in-workspace reads continue to native permission checks, denies protected paths and shell network commands, and holds writes and other ambiguous actions for review. Claude Code can show a native approval prompt. The Codex hook holds those actions by denying the call because Codex's `PreToolUse` hook only supports a deny for this policy. [Codex hook behavior](https://learn.chatgpt.com/docs/hooks#pretooluse) · [Claude Code hook behavior](https://code.claude.com/docs/en/hooks#pretooluse)
+
+### Retrieve notes inside a normal Codex chat
+
+With guarded retrieval installed, start a new local Codex session in this folder and try this prompt.
+
+> Use the firewall_notes tool to read notes clean and flagged. Summarize what you can read.
+
+The `firewall_notes` MCP server sends selected note IDs to the local firewall. The model receives the clean note and a withholding notice for the flagged note. You can set `PI_FIREWALL_NOTES_DIR` to an operator-maintained folder containing up to 128 UTF-8 `.txt`, `.md`, or `.html` files and restart the backend to load them. The tool accepts note IDs. Native file reads of that folder are denied when the tool policy is enabled. The HTTP gateway can also inspect text in supported tool-result messages when the model session is routed through it.
+
+## Verify automatic routing from Codex
+
+From the project root, run the smoke test with Codex installed. The script checks PATH and can find the Microsoft Store desktop installation on Windows. With this project's virtual environment, use PowerShell.
+
+```powershell
+& '.\.venv\Scripts\python.exe' -m backend.eval.codex_smoke
+```
+
+The test starts a firewall and a deterministic model on separate loopback ports. It creates a temporary Codex configuration and audit database and uses the guarded MCP server to look up two synthetic support notes. Codex sends a normal user prompt and then sends the tool results during the same turn. The test checks the retrieval decisions and the captured upstream request. The clean note must be present and the flagged note must be replaced with a withholding notice. No account or API key is needed. Pass `--codex PATH` to select an executable explicitly.
+
+To type your own prompt, use PowerShell. The firewall evaluates the text you enter. The mock still uses the same two notes so you can verify what was forwarded.
+
+```powershell
+$prompt = Read-Host 'Enter a prompt for Codex'
+& '.\.venv\Scripts\python.exe' -m backend.eval.codex_smoke --prompt="$prompt"
+```
+
+For a separate local integration, set `PI_FIREWALL_RESPONSES_UPSTREAM` before starting the backend to a trusted HTTP origin such as `http://127.0.0.1:9010` that implements `POST /v1/responses`. Configure Codex's Responses provider with the firewall's `/v1` base URL. The gateway checks user text, supported tool results, assistant text, and supported structured tool arguments. It buffers SSE and reassembles fragmented tool arguments before releasing any output. `allowed_domains` controls output destinations. `allowed_tool_domains` controls eligible native web destinations, which still require review. The gateway stores decision metadata. Session canaries and per-client cooldowns apply to the demo chat route. The Responses route covers configured sessions and context sent in the request. Provider-side retrieval, image and file contents, WebSockets, and Windows-wide monitoring are outside its scope. [Codex provider configuration](https://learn.chatgpt.com/docs/config-file/config-reference)
+
 ## Reproduce the results
 
 ```sh
@@ -77,6 +120,14 @@ python -m backend.eval.suite --phase advanced
 | p95 latency | 0.01 ms | 11.17 ms | 14.99 ms | 17.86 ms | 34.95 ms |
 
 The classifier uses stratified train, validation, and test splits. Calibration uses training folds. The validation split selects a threshold targeting at most 5% benign false positives. Model Lab uses the held-out predictions, while the tier benchmark also includes training scenarios. The report records held-out patterns-only, ML-only, and combined runs and the confusion matrix for each.
+
+### Compare releases on the frozen holdout
+
+The [67-case holdout](backend/eval/heldout.jsonl) includes support questions, code and log excerpts, documents, tool actions, and synthetic disclosure markers. Its prompt text is excluded from training and similarity indexing. It reports false alerts and false holds separately, missed enforcement by surface, and p50 and p95 latency. The [saved baseline](backend/eval/heldout_baseline.json) records the fixture checksum and decisions. CI compares the candidate release against that same fixture version.
+
+```sh
+python -m backend.eval.heldout --compare backend/eval/heldout_baseline.json
+```
 
 ### Optional embeddings
 

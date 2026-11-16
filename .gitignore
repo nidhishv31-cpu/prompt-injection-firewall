@@ -9,3 +9,6 @@ __pycache__/
 backend/generated/
 frontend/node_modules/
 frontend/dist/
+.codex/hooks.json
+.codex/config.toml
+.claude/settings.local.json

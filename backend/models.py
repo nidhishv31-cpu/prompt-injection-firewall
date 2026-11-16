@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
@@ -32,6 +32,27 @@ class ChatResponse(BaseModel):
     reasons: list[Reason]
     response: str
     latency_ms: float
+
+
+class PromptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=12000)
+    source: Literal["codex", "claude"]
+
+
+class PromptResponse(BaseModel):
+    decision: Decision
+    risk: float
+
+
+class ActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["codex", "claude"]
+    cwd: str = Field(default="", max_length=1200)
+    tool: str = Field(min_length=1, max_length=150)
+    arguments: dict[str, Any]
 
 
 class RulesUpdate(BaseModel):

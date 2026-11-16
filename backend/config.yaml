@@ -12,3 +12,4 @@ decay_half_life: 180
 block_capacity: 5
 block_refill_seconds: 60
 allowed_domains: []
+allowed_tool_domains: []
