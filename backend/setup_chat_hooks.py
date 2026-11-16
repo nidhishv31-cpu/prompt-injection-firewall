@@ -25,10 +25,21 @@ MCP_BEGIN = "# BEGIN PROMPT FIREWALL GUARDED RETRIEVAL"
 MCP_END = "# END PROMPT FIREWALL GUARDED RETRIEVAL"
 
 
-def hook_definition(app: str, port: int, tool_guard: bool = False) -> dict[str, Any]:
-    args = [sys.executable, str(SCRIPT), "--app", app, "--port", str(port)]
+def hook_arguments(app: str, port: int, tool_guard: bool = False) -> list[str]:
+    base_python = Path(sys.base_prefix) / "python.exe"
+    executable = (
+        str(base_python)
+        if sys.platform == "win32" and base_python.is_file()
+        else sys.executable
+    )
+    args = [executable, "-S", str(SCRIPT), "--app", app, "--port", str(port)]
     if tool_guard:
         args.extend(("--event", "tool"))
+    return args
+
+
+def hook_definition(app: str, port: int, tool_guard: bool = False) -> dict[str, Any]:
+    args = hook_arguments(app, port, tool_guard)
     fields: dict[str, Any] = {
         "type": "command",
         "command": shlex.join(args),

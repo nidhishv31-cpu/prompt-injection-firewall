@@ -198,7 +198,7 @@ def dashboard(request: Request) -> dict[str, object]:
                 str(reason["category"])
                 for reason in row.reasons
                 if reason.get("category")
-                and (row.decision != "allow")
+                and (row.decision != "allow" or reason.get("layer") == "moderation")
                 and float(reason["score"]) >= 0.64
             }
         )

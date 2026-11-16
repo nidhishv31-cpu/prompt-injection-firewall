@@ -1,6 +1,7 @@
 import json
-from collections.abc import AsyncIterable, Callable, Iterator
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterator
 from dataclasses import dataclass, field
+from functools import lru_cache
 from os import getenv
 from time import perf_counter
 from typing import Any
@@ -73,6 +74,14 @@ class Audit:
         )[:32]
 
 
+@dataclass(frozen=True)
+class UpstreamReply:
+    body: bytes
+    media: str
+    first_body_byte_ms: float
+    total_ms: float
+
+
 def configured_upstream() -> httpx.URL | None:
     origin = getenv("PI_FIREWALL_RESPONSES_UPSTREAM", "").strip()
     if not origin:
@@ -134,6 +143,7 @@ def inspect_request(
         audit.add(verdict.decision, verdict.risk, verdict.reasons)
         return WITHHELD_PROMPT if verdict.decision == Decision.SANITIZE else text
 
+    @lru_cache(maxsize=16)
     def document(text: str) -> str:
         validate_text(text)
         if not settings.mid_enabled:
@@ -365,7 +375,8 @@ def inspect_response(
 
 async def call_upstream(
     upstream: httpx.URL, payload: dict[str, Any], stream: bool
-) -> tuple[bytes, str]:
+) -> UpstreamReply:
+    started = perf_counter()
     media = "text/event-stream" if stream else "application/json"
     size_error = GatewayError(
         502, "upstream_too_large", "The local model response exceeds the gateway limit."
@@ -392,7 +403,23 @@ async def call_upstream(
                     "invalid_upstream",
                     "The local model returned an unexpected content type.",
                 )
-            return await bounded_body(reply.aiter_bytes(), size_error), media
+            first_body_byte_ms: float | None = None
+
+            async def timed_body() -> AsyncIterator[bytes]:
+                nonlocal first_body_byte_ms
+                async for data in reply.aiter_bytes():
+                    if first_body_byte_ms is None:
+                        first_body_byte_ms = (perf_counter() - started) * 1000
+                    yield data
+
+            raw = await bounded_body(timed_body(), size_error)
+            total_ms = (perf_counter() - started) * 1000
+            return UpstreamReply(
+                raw,
+                media,
+                total_ms if first_body_byte_ms is None else first_body_byte_ms,
+                total_ms,
+            )
     except (httpx.HTTPError, ValueError, RecursionError) as error:
         raise GatewayError(
             502, "upstream_unavailable", "The local model response could not be read."
@@ -418,6 +445,7 @@ async def responses(request: Request) -> Response:
         firewall: Firewall = request.app.state.firewall
         settings: Settings = request.app.state.settings
     audit = Audit()
+    timing: list[str] = []
     try:
         invalid_size = GatewayError(
             413, "request_too_large", "The request exceeds the local gateway limit."
@@ -429,9 +457,19 @@ async def responses(request: Request) -> Response:
                 400, "firewall_blocked", "The firewall blocked this request."
             )
         stream = payload.get("stream") is True
-        raw, media = await call_upstream(upstream, payload, stream)
-        await run_in_threadpool(inspect_response, raw, stream, settings, audit)
-        result = Response(raw, media_type=media)
+        upstream_reply = await call_upstream(upstream, payload, stream)
+        timing.extend(
+            (
+                f"upstream-first-body-byte;dur={upstream_reply.first_body_byte_ms:.2f}",
+                f"upstream-download;dur={upstream_reply.total_ms:.2f}",
+            )
+        )
+        checked = perf_counter()
+        await run_in_threadpool(
+            inspect_response, upstream_reply.body, stream, settings, audit
+        )
+        timing.append(f"output-inspection;dur={(perf_counter() - checked) * 1000:.2f}")
+        result = Response(upstream_reply.body, media_type=upstream_reply.media)
     except GatewayError as error:
         result = error.response()
         audit.add(
@@ -451,7 +489,7 @@ async def responses(request: Request) -> Response:
         reasons=[
             (
                 reason
-                if reason.layer == "responses"
+                if reason.layer in {"responses", "moderation"}
                 else reason.model_copy(
                     update={"evidence": "Responses gateway finding."}
                 )
@@ -460,4 +498,6 @@ async def responses(request: Request) -> Response:
         ],
         latency_ms=(perf_counter() - started) * 1000,
     )
+    timing.append(f"gateway-total;dur={(perf_counter() - started) * 1000:.2f}")
+    result.headers["Server-Timing"] = ", ".join(timing)
     return result

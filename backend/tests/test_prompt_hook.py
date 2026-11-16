@@ -32,11 +32,22 @@ def event(prompt: str) -> bytes:
 def test_prompt_hook_returns_native_decision(
     monkeypatch: pytest.MonkeyPatch, decision: str, blocked: bool
 ) -> None:
-    inspect = Mock(return_value=decision)
+    inspect = Mock(return_value=(decision, "clear"))
     monkeypatch.setattr(prompt_hook, "inspect_prompt", inspect)
     result = prompt_hook.hook_reply("codex", 8000, event("Hello."))
     assert (result.get("decision") == "block") is blocked
     inspect.assert_called_once_with("codex", 8000, "Hello.")
+
+
+def test_hook_reports_distinct_moderation_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        prompt_hook, "inspect_prompt", Mock(return_value=("block", "blocked"))
+    )
+    result = prompt_hook.hook_reply("claude", 8000, event("This is bullshit."))
+    assert result["decision"] == "block"
+    assert "vulgar language" in result["reason"]
 
 
 def test_prompt_hook_stops_when_service_is_down(

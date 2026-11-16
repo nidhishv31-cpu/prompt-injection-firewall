@@ -247,6 +247,8 @@ def test_responses_releases_clean_sse_unchanged(
     assert result.status_code == 200
     assert result.headers["X-PI-Firewall-Decision"] == "allow"
     assert result.content == upstream.content
+    assert "upstream-first-body-byte;dur=" in result.headers["Server-Timing"]
+    assert "gateway-total;dur=" in result.headers["Server-Timing"]
 
 
 def test_responses_withholds_split_synthetic_marker_before_streaming(

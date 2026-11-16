@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from backend.pipeline.moderation import ModerationOutcome
 from backend.pipeline.policy import Decision, Reason, Rule
 from backend.victim_app.documents import DOCUMENTS
 
@@ -44,6 +45,7 @@ class PromptRequest(BaseModel):
 class PromptResponse(BaseModel):
     decision: Decision
     risk: float
+    moderation: ModerationOutcome = ModerationOutcome.CLEAR
 
 
 class ActionRequest(BaseModel):

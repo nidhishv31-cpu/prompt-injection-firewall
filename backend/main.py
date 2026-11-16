@@ -87,12 +87,15 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/inspect-prompt", response_model=PromptResponse)
-def inspect_prompt(body: PromptRequest, request: Request) -> PromptResponse:
+def inspect_prompt(
+    body: PromptRequest, request: Request, response: Response
+) -> PromptResponse:
     started = perf_counter()
     with request.app.state.lock:
         firewall: Firewall = request.app.state.firewall
         settings: Settings = request.app.state.settings
     verdict = firewall.inspect(body.text, settings)
+    scoring = perf_counter()
     store: Store = request.app.state.store
     store.record(
         original=f"[{body.source} chat prompt]",
@@ -100,12 +103,22 @@ def inspect_prompt(body: PromptRequest, request: Request) -> PromptResponse:
         decision=verdict.decision,
         risk=verdict.risk,
         reasons=[
-            item.model_copy(update={"evidence": "Prompt hook finding."})
+            (
+                item
+                if item.layer == "moderation"
+                else item.model_copy(update={"evidence": "Prompt hook finding."})
+            )
             for item in verdict.reasons
         ],
-        latency_ms=(perf_counter() - started) * 1000,
+        latency_ms=(scoring - started) * 1000,
     )
-    return PromptResponse(decision=verdict.decision, risk=verdict.risk)
+    audited = perf_counter()
+    response.headers["Server-Timing"] = (
+        f"scoring;dur={(scoring - started) * 1000:.2f}, audit;dur={(audited - scoring) * 1000:.2f}"
+    )
+    return PromptResponse(
+        decision=verdict.decision, risk=verdict.risk, moderation=verdict.moderation
+    )
 
 
 @app.post("/api/inspect-action", response_model=ActionResult)

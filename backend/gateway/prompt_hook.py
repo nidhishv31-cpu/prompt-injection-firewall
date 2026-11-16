@@ -16,14 +16,17 @@ DENIED = "Prompt Firewall stopped this message because its decision was"
 UNAVAILABLE = "Prompt Firewall could not check this message. Start the local firewall on port {port}."
 
 
-def inspect_prompt(app: str, port: int, prompt: str) -> str:
+def inspect_prompt(app: str, port: int, prompt: str) -> tuple[str, str]:
     verdict = request_json(
         port, "POST", "/api/inspect-prompt", {"source": app, "text": prompt}
     )
     decision = verdict.get("decision") if isinstance(verdict, dict) else None
     if decision not in ("allow", "flag", "sanitize", "block"):
         raise ValueError("The firewall returned an invalid verdict.")
-    return decision
+    moderation = verdict.get("moderation", "clear")
+    if moderation not in ("clear", "reported", "blocked"):
+        raise ValueError("The firewall returned an invalid moderation verdict.")
+    return decision, moderation
 
 
 def hook_reply(app: str, port: int, raw: bytes) -> dict[str, Any]:
@@ -42,9 +45,14 @@ def hook_reply(app: str, port: int, raw: bytes) -> dict[str, Any]:
         prompt = event.get("prompt")
         if not isinstance(prompt, str):
             raise TypeError("The hook did not provide prompt text.")
-        decision = inspect_prompt(app, port, prompt)
+        decision, moderation = inspect_prompt(app, port, prompt)
     except (OSError, HTTPException, TypeError, ValueError, RecursionError):
         return {"decision": "block", "reason": UNAVAILABLE.format(port=port)}
+    if moderation == "blocked":
+        return {
+            "decision": "block",
+            "reason": "Prompt Firewall blocked vulgar language under the local moderation policy.",
+        }
     if decision in ("sanitize", "block"):
         return {"decision": "block", "reason": f"{DENIED} {decision}."}
     return {}

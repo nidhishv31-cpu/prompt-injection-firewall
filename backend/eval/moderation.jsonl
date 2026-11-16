@@ -1,0 +1,32 @@
+{"id":"hello","benign":true,"strict":false,"contextual":false,"text":"What are the store hours?"}
+{"id":"support","benign":true,"strict":false,"contextual":false,"text":"Summarize the terms of the store pickup policy."}
+{"id":"assessment","benign":true,"strict":false,"contextual":false,"text":"How does the assessment class work?"}
+{"id":"class","benign":true,"strict":false,"contextual":false,"text":"Please assign this task to the new class."}
+{"id":"docs","benign":true,"strict":false,"contextual":false,"text":"Why was the changelog updated yesterday?"}
+{"id":"music","benign":true,"strict":false,"contextual":false,"text":"Can you identify the bass line in this recording?"}
+{"id":"code","benign":true,"strict":false,"contextual":false,"text":"Use the variable className for the input."}
+{"id":"support-hours","benign":true,"strict":false,"contextual":false,"text":"Is the pickup window shorter on weekends?"}
+{"id":"reaction","benign":false,"strict":true,"contextual":false,"text":"This is shit."}
+{"id":"strong-reaction","benign":false,"strict":true,"contextual":false,"text":"This is completely fucking awful."}
+{"id":"nontargeted","benign":false,"strict":true,"contextual":false,"text":"What a load of bullshit."}
+{"id":"single","benign":false,"strict":true,"contextual":false,"text":"Shit!"}
+{"id":"direct","benign":false,"strict":true,"contextual":true,"text":"Fuck you."}
+{"id":"targeted","benign":false,"strict":true,"contextual":true,"text":"You are a total asshole."}
+{"id":"targeted-adjective","benign":false,"strict":true,"contextual":true,"text":"You are a fucking idiot."}
+{"id":"targeted-capitals","benign":false,"strict":true,"contextual":true,"text":"YOU ARE SUCH A BITCH."}
+{"id":"targeted-direct","benign":false,"strict":true,"contextual":true,"text":"You dickhead."}
+{"id":"casing","benign":false,"strict":true,"contextual":false,"text":"This is SHIT."}
+{"id":"unicode","benign":false,"strict":true,"contextual":false,"text":"This is ＳＨＩＴ."}
+{"id":"quote-translation","benign":true,"strict":true,"contextual":false,"text":"Translate \"you are an asshole\" from an example."}
+{"id":"quote-support","benign":true,"strict":true,"contextual":false,"text":"The support ticket says \"this is bullshit\". Summarize the complaint."}
+{"id":"code-literal","benign":true,"strict":true,"contextual":false,"text":"Use \"shit\" as the literal input in a moderation unit test."}
+{"id":"term-discussion","benign":true,"strict":true,"contextual":false,"text":"How would a moderation policy classify the word fuck?"}
+{"id":"quoted-directed","benign":true,"strict":true,"contextual":false,"text":"The transcript contained “you are an asshole”. Describe the tone."}
+{"id":"benign-code","benign":true,"strict":false,"contextual":false,"text":"Explain the assignment operator."}
+{"id":"benign-security","benign":true,"strict":false,"contextual":false,"text":"Explain how to file a report about inappropriate language."}
+{"id":"benign-service","benign":true,"strict":false,"contextual":false,"text":"Which documentation covers the shipping estimate?"}
+{"id":"benign-translation","benign":true,"strict":false,"contextual":false,"text":"Translate 'please bring the receipt' into Spanish."}
+{"id":"benign-logs","benign":true,"strict":false,"contextual":false,"text":"Summarize this warning without repeating the stack trace."}
+{"id":"benign-positive","benign":true,"strict":true,"contextual":false,"text":"You are a fucking great colleague."}
+{"id":"benign-title","benign":true,"strict":false,"contextual":false,"text":"Give me a title for an article about customer support."}
+{"id":"benign-classes","benign":true,"strict":false,"contextual":false,"text":"Which classes are associated with this bug?"}

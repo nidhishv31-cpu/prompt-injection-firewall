@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from functools import cached_property
 
 import numpy as np
+from scipy.sparse import csr_matrix
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -29,8 +30,11 @@ class Classifier:
     def probabilities(self, texts: list[str]) -> list[float]:
         return self.model.predict_proba(self.features.transform(texts))[:, 1].tolist()
 
-    def inspect(self, normalized: Normalized) -> tuple[float, str]:
-        matrix = self.features.transform(list(normalized.views))
+    def inspect(
+        self, normalized: Normalized, *, matrix: csr_matrix | None = None
+    ) -> tuple[float, str]:
+        if matrix is None:
+            matrix = self.features.transform(list(normalized.views))
         probabilities = self.model.predict_proba(matrix)[:, 1]
         strongest = int(probabilities.argmax())
         vector = matrix[strongest]

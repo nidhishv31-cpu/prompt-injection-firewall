@@ -99,8 +99,15 @@ class SimilarityIndex:
         )
         return float(np.max(score[:, 1]))
 
-    def nearest(self, views: tuple[str, ...]) -> Neighbor:
-        scores = cosine_similarity(self._encode(list(views)), self.reference)
+    def nearest(
+        self, views: tuple[str, ...], *, tfidf: csr_matrix | None = None
+    ) -> Neighbor:
+        encoded = (
+            tfidf
+            if tfidf is not None and self.encoder is None
+            else self._encode(list(views))
+        )
+        scores = cosine_similarity(encoded, self.reference)
         match = int(scores.max(axis=0).argmax())
         case = self.cases[match]
         return Neighbor(

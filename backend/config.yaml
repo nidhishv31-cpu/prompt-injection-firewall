@@ -13,3 +13,17 @@ block_capacity: 5
 block_refill_seconds: 60
 allowed_domains: []
 allowed_tool_domains: []
+inspection_cache_size: 256
+moderation:
+  mode: strict
+  terms:
+    - fuck
+    - fucking
+    - fucker
+    - motherfucker
+    - shit
+    - bullshit
+    - asshole
+    - bitch
+    - cunt
+    - dickhead

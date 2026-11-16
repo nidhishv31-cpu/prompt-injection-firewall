@@ -77,6 +77,23 @@ With guarded retrieval installed, start a new local Codex session in this folder
 
 The `firewall_notes` MCP server sends selected note IDs to the local firewall. The model receives the clean note and a withholding notice for the flagged note. You can set `PI_FIREWALL_NOTES_DIR` to an operator-maintained folder containing up to 128 UTF-8 `.txt`, `.md`, or `.html` files and restart the backend to load them. The tool accepts note IDs. Native file reads of that folder are denied when the tool policy is enabled. The HTTP gateway can also inspect text in supported tool-result messages when the model session is routed through it.
 
+### Moderate vulgar prompts
+
+Edit `moderation` in `backend/config.yaml` and restart the backend. The moderation policy applies to Codex and Claude Code prompt hooks, the playground chat endpoint, and user messages through the Responses gateway. Hook audits record the moderation category and decision without retaining the prompt text.
+
+| Mode | Behavior |
+| --- | --- |
+| `strict` | Blocks configured profanity even inside quotations. |
+| `contextual` | Uses English targeting patterns for direct insults. It skips explicit quotations and inline code. |
+| `report-only` | Logs strict-mode matches and leaves the prompt’s injection-policy verdict in effect. |
+| `off` | Disables moderation. |
+
+The default English word list is configurable and uses Unicode-normalized word boundaries. Add the terms used in your workspace, including terms in other languages. Contextual targeting is heuristic and limited to English patterns.
+
+Run `python -m backend.eval.moderation_benchmark` to measure coverage, benign block rates, and p50 and p95 across the local hook subprocess and API. Gateway timing measures the upstream first body byte separately from the first client body byte. Streaming stays buffered until output checks complete. Repeated prompts reuse a bounded in-memory inspection cache tied to the active settings and rules. Set `inspection_cache_size: 0` to disable it.
+
+On the 32 English fixtures, strict mode blocked all 11 vulgar prompts and 6 of 21 benign prompts that deliberately included profanity. Contextual mode blocked all 5 direct insults and none of the 21 benign prompts. In a paired Windows run on the same clean prompts, hook subprocess p95 fell from 227 ms to 197 ms. The loopback HTTP p95 for repeated prompts was 9 ms with caching and 18 ms with the cache disabled. The hook timings include launching the subprocess and calling the local backend.
+
 ## Verify automatic routing from Codex
 
 From the project root, run the smoke test with Codex installed. The script checks PATH and can find the Microsoft Store desktop installation on Windows. With this project's virtual environment, use PowerShell.
