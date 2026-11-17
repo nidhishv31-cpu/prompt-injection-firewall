@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TestingApprovals } from "./TestingApprovals";
 import {
   Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
@@ -156,6 +157,7 @@ export function Dashboard() {
   return <div className="stack">
     <ErrorNotice error={error} />
     {stats && <div className="stat-grid">{stats.map(([label, value]) => <dl key={label}><dt>{label}</dt><dd>{value}</dd></dl>)}</div>}
+    <TestingApprovals />
     <div className="split">
       <section className="panel">
         <div className="panel-heading"><h2>Decisions over time</h2><span className="quiet">Last 500 requests</span></div>

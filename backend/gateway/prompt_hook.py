@@ -4,21 +4,24 @@ import argparse
 import json
 import sys
 from http.client import HTTPException
+from pathlib import Path
 from typing import Any
 
 if __package__:
     from .local_http import request_json
+    from .testing_scope import SCOPE_PATH, read_scope
 else:
     from local_http import request_json
+    from testing_scope import SCOPE_PATH, read_scope
 
 MAX_HOOK_INPUT = 256 * 1024
 DENIED = "Prompt Firewall stopped this message because its decision was"
 UNAVAILABLE = "Prompt Firewall could not check this message. Start the local firewall on port {port}."
 
 
-def inspect_prompt(app: str, port: int, prompt: str) -> tuple[str, str]:
+def inspect_prompt(app: str, port: int, prompt: str, **options: Any) -> tuple[str, str]:
     verdict = request_json(
-        port, "POST", "/api/inspect-prompt", {"source": app, "text": prompt}
+        port, "POST", "/api/inspect-prompt", {"source": app, "text": prompt}, **options
     )
     decision = verdict.get("decision") if isinstance(verdict, dict) else None
     if decision not in ("allow", "flag", "sanitize", "block"):
@@ -29,7 +32,7 @@ def inspect_prompt(app: str, port: int, prompt: str) -> tuple[str, str]:
     return decision, moderation
 
 
-def hook_reply(app: str, port: int, raw: bytes) -> dict[str, Any]:
+def hook_reply(app: str, port: int, raw: bytes, **options: Any) -> dict[str, Any]:
     try:
         if len(raw) > MAX_HOOK_INPUT:
             return {
@@ -45,7 +48,7 @@ def hook_reply(app: str, port: int, raw: bytes) -> dict[str, Any]:
         prompt = event.get("prompt")
         if not isinstance(prompt, str):
             raise TypeError("The hook did not provide prompt text.")
-        decision, moderation = inspect_prompt(app, port, prompt)
+        decision, moderation = inspect_prompt(app, port, prompt, **options)
     except (OSError, HTTPException, TypeError, ValueError, RecursionError):
         return {"decision": "block", "reason": UNAVAILABLE.format(port=port)}
     if moderation == "blocked":
@@ -58,7 +61,7 @@ def hook_reply(app: str, port: int, raw: bytes) -> dict[str, Any]:
     return {}
 
 
-def action_reply(app: str, port: int, raw: bytes) -> dict[str, Any]:
+def action_reply(app: str, port: int, raw: bytes, **options: Any) -> dict[str, Any]:
     try:
         if len(raw) > MAX_HOOK_INPUT:
             raise ValueError("Tool event exceeds the inspection limit.")
@@ -75,6 +78,7 @@ def action_reply(app: str, port: int, raw: bytes) -> dict[str, Any]:
                 "tool": event["tool_name"],
                 "arguments": event["tool_input"],
             },
+            **options,
         )
         decision, reason = verdict["decision"], verdict["reason"]
         if decision not in ("allow", "review", "deny") or not isinstance(reason, str):
@@ -99,16 +103,54 @@ def action_reply(app: str, port: int, raw: bytes) -> dict[str, Any]:
     }
 
 
+def dispatch(
+    app: str, port: int, kind: str, raw: bytes, scope_path: Path | None
+) -> dict[str, Any]:
+    handler = hook_reply if kind == "prompt" else action_reply
+    if scope_path is None:
+        return handler(app, port, raw)
+    if app != "codex":
+        return {}
+    scope = read_scope(scope_path)
+    if scope is None:
+        return {}
+    try:
+        event = json.loads(raw)
+    except (ValueError, RecursionError):
+        return {}
+    if not isinstance(event, dict) or event.get("session_id") != scope.session:
+        return {}
+    return handler(
+        app,
+        port,
+        raw,
+        headers={
+            "X-Firewall-Session": scope.session,
+            "X-Firewall-Hook-Key": scope.hook_key,
+        },
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", choices=("codex", "claude"), required=True)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--event", choices=("prompt", "tool"), default="prompt")
+    parser.add_argument("--test-scope", type=Path)
     args = parser.parse_args()
-    handler = hook_reply if args.event == "prompt" else action_reply
+    scope_path = args.test_scope
+    # Hooks loaded from an older project config still honor the local test switch.
+    if scope_path is None and SCOPE_PATH.is_file():
+        scope_path = SCOPE_PATH
     print(
         json.dumps(
-            handler(args.app, args.port, sys.stdin.buffer.read(MAX_HOOK_INPUT + 1))
+            dispatch(
+                args.app,
+                args.port,
+                args.event,
+                sys.stdin.buffer.read(MAX_HOOK_INPUT + 1),
+                scope_path,
+            )
         )
     )
 

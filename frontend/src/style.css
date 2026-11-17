@@ -166,6 +166,11 @@ details pre { border: 1px solid var(--stroke); padding: .7rem; margin-top: .45re
 .stat-grid dd { margin-top: .28rem; font-size: clamp(1rem, 2vw, 1.4rem); letter-spacing: -.055em; overflow-wrap: anywhere; }
 .chart { height: 272px; width: 100%; min-width: 0; }
 .chart .recharts-text { fill: var(--quiet); font-size: .75rem; }
+.approval-heading { flex-wrap: wrap; }
+.approval-session, .approval-entry h3 { overflow-wrap: anywhere; }
+.approval-entry { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--stroke); }
+.approval-entry code, .approval-session code { font-family: var(--mono); }
+.approval-patch { min-width: 0; max-height: 16rem; overflow: auto; padding: .75rem; border: 1px solid var(--stroke); border-radius: 6px; background: var(--input); font: .83rem/1.5 var(--mono); }
 .legend { display: flex; flex-wrap: wrap; gap: 11px; font-size: .8rem; color: var(--quiet); }
 .legend span { display: flex; align-items: center; gap: 5px; text-transform: capitalize; }
 .legend i { width: 8px; height: 8px; border-radius: 2px; }

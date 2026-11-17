@@ -69,6 +69,22 @@ Type **What are the store hours?** in the chat box to check that a benign prompt
 
 Each prompt hook checks typed text before model submission using your existing account. The tool hook covers supported calls in that local project. It lets simple in-workspace reads continue to native permission checks, denies protected paths and shell network commands, and holds writes and other ambiguous actions for review. Claude Code can show a native approval prompt. The Codex hook holds those actions by denying the call because Codex's `PreToolUse` hook only supports a deny for this policy. [Codex hook behavior](https://learn.chatgpt.com/docs/hooks#pretooluse) · [Claude Code hook behavior](https://code.claude.com/docs/en/hooks#pretooluse)
 
+### Approve one documentation edit in a designated Codex test chat
+
+Start the backend on loopback, then designate the session UUID of one existing local Codex chat. For CLI sessions, `codex exec --json` reports the UUID in the `thread.started` event. Resume that session to test. Omitting `--testing-session` disarms the test profile.
+
+```powershell
+& '.\.venv\Scripts\python.exe' -m backend.setup_chat_hooks --port 8010 --test-only --testing-session '<session-uuid>'
+$env:PI_FIREWALL_UI_BACKEND_PORT = '8010'
+npm --prefix frontend run dev -- --host 127.0.0.1
+```
+
+Open Dashboard, then **Testing approvals**. Copy the local key with `Get-Content -LiteralPath '.uv-cache/approval-testing.operator.key' | Set-Clipboard` and paste it into the dashboard. Keep the operator key out of chat.
+
+In the selected chat, trust the project hooks if prompted. Ask Codex to use `apply_patch` to create `firewall-approval-test.md` containing `Firewall approval test.` The first attempt is held. Refresh the approvals panel, review the patch, and select **Approve once**. In the same chat, ask Codex to retry the exact patch. Refresh the panel to see **Consumed**, and check the file. The approval expires after two minutes and covers one retry through Codex's native permissions. The queue accepts only single-file Markdown or plain-text additions or updates, and rechecks the target against its original contents.
+
+Other project chats, including Claude Code chats, skip firewall inspection through these hooks while the test profile is installed. The manual Playground, Responses gateway, and explicitly configured guarded retrieval are separate integration paths. Use one backend worker for the in-memory queue. The local test profile and operator key are ignored by Git.
+
 ### Retrieve notes inside a normal Codex chat
 
 With guarded retrieval installed, start a new local Codex session in this folder and try this prompt.

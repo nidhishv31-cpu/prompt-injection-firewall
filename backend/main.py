@@ -16,6 +16,7 @@ from backend.console import apply_rules, router
 from backend.db import Store
 from backend.gateway.responses import configured_upstream
 from backend.gateway.responses import router as responses_router
+from backend.gateway.testing_scope import SCOPE_PATH
 from backend.models import (
     ActionRequest,
     ChatRequest,
@@ -31,6 +32,8 @@ from backend.pipeline.normalizer import clean
 from backend.pipeline.policy import Decision, Patterns, Reason, load_rules
 from backend.pipeline.retrieval import load_notes
 from backend.pipeline.similarity import SimilarityIndex
+from backend.testing_approvals import ApprovalQueue
+from backend.testing_approvals import router as approvals_router
 from backend.training.train_classifier import cases, load_or_train, split_cases
 from backend.victim_app.chat import Turn, create_backend
 from backend.victim_app.documents import DOCUMENTS
@@ -51,6 +54,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ).resolve(strict=True)
     if not app.state.action_root.is_dir():
         raise ValueError("The action policy root must be a directory.")
+    app.state.approvals = ApprovalQueue(
+        Path(getenv("PI_FIREWALL_TEST_SCOPE") or SCOPE_PATH)
+    )
     classifier, metrics = load_or_train()
     app.state.metrics = metrics
     app.state.settings = load_settings()
@@ -79,6 +85,7 @@ app.add_middleware(
 )
 app.include_router(router)
 app.include_router(responses_router)
+app.include_router(approvals_router)
 
 
 @app.get("/api/health")
@@ -90,6 +97,8 @@ def health() -> dict[str, str]:
 def inspect_prompt(
     body: PromptRequest, request: Request, response: Response
 ) -> PromptResponse:
+    if "x-firewall-session" in request.headers:
+        request.app.state.approvals.verify_hook(request, body.source)
     started = perf_counter()
     with request.app.state.lock:
         firewall: Firewall = request.app.state.firewall
@@ -134,6 +143,8 @@ def inspect_action(body: ActionRequest, request: Request) -> ActionResult:
         settings.allowed_tool_domains,
         request.app.state.protected_roots,
     )
+    if "x-firewall-session" in request.headers:
+        result = request.app.state.approvals.inspect(request, body, result)
     decision = {
         "allow": Decision.ALLOW,
         "deny": Decision.BLOCK,
